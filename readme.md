@@ -14,8 +14,8 @@ Run node process:
 ```
 node bridge.js
 ```
-You can now open *p5-handpose/index.html* in the browser and it will send OSC to port **3334**.
+You can now open *http://localhost:3000/* in the browser and it will send OSC to port **3334**.
 
 ### Thanks
-Gene Kogan for p5js-osc
+Gene Kogan for p5js-osc <br>
 MediaPipe team

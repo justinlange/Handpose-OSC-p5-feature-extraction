@@ -6,6 +6,18 @@ var oscServer, oscClient;
 
 var isConnected = false;
 
+var path = require('path');
+var express = require('express');
+var app = express();
+
+var dir = path.join(__dirname, 'public');
+
+app.use(express.static(dir));
+
+app.listen(3000, function () {
+	console.log('Listening on http://localhost:3000/');
+});
+
 io.sockets.on('connection', function (socket) {
 	console.log('connection');
 	socket.on("config", function (obj) {
