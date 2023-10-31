@@ -95,9 +95,6 @@ function sendKeypoints(predictions) {
       // Thumb to the base of each finger
       [4, 5], [4, 9], [4, 13], [4, 17],
 
-      // Wrist to fingertips
-      [0, 4], [0, 8], [0, 12], [0, 16], [0, 20],
-      // Add more pairs as needed...
     ];
 
 
@@ -133,13 +130,13 @@ function sendKeypoints(predictions) {
       [0, 4], [0, 8], [0, 12], [0, 16], [0, 20]
     ];
 
-     // Add direction angles relative to the wrist direction to feature vector
-    wristToFingertips.forEach(pair => {
-      const wristDirection = directionVector(prediction.landmarks[pair[0]], prediction.landmarks[0]);
-      const fingerDirection = directionVector(prediction.landmarks[pair[0]], prediction.landmarks[pair[1]]);
-      const angle = calculateAngleVectors(wristDirection, fingerDirection);
-      featureVector.push(angle);
-    });
+    //  // Add direction angles relative to the wrist direction to feature vector
+    // wristToFingertips.forEach(pair => {
+    //   const wristDirection = directionVector(prediction.landmarks[pair[0]], prediction.landmarks[0]);
+    //   const fingerDirection = directionVector(prediction.landmarks[pair[0]], prediction.landmarks[pair[1]]);
+    //   const angle = calculateAngleVectors(wristDirection, fingerDirection);
+    //   featureVector.push(angle);
+    // });
 
 
       // Add angles between each finger's joints to angles array
@@ -150,6 +147,28 @@ function sendKeypoints(predictions) {
         prediction.landmarks[angleSet[2]]
       );
       angles.push(angle);
+    });
+
+
+
+    // Thumb direction vector
+    const thumbDirection = directionVector(prediction.landmarks[0], prediction.landmarks[4]);
+
+    // Define directions for each finger (base to tip)
+    const fingerDirections = [
+      directionVector(prediction.landmarks[0], prediction.landmarks[4]), // Thumb
+      directionVector(prediction.landmarks[5], prediction.landmarks[8]), // Index
+      directionVector(prediction.landmarks[9], prediction.landmarks[12]), // Middle
+      directionVector(prediction.landmarks[13], prediction.landmarks[16]), // Ring
+      directionVector(prediction.landmarks[17], prediction.landmarks[20]) // Pinky
+    ];
+
+    // Calculate angles between thumb direction and each finger direction
+    fingerDirections.forEach((fingerDirection, index) => {
+      if (index !== 0) { // Skip thumb to thumb comparison
+        const angle = calculateAngleVectors(thumbDirection, fingerDirection);
+        angles.push(angle);
+      }
     });
 
 
@@ -169,15 +188,36 @@ function sendKeypoints(predictions) {
     });
 
 
-    // Add angles between each finger's joints to feature vector
-    selectedAngles.forEach(angleSet => {
-      const angle = calculateAngle(
-        prediction.landmarks[angleSet[0]],
-        prediction.landmarks[angleSet[1]],
-        prediction.landmarks[angleSet[2]]
-      );
-      featureVector.push(angle);
-    });
+    // to figure out the orientation of the palm, we'll construct a triangle that  uses 
+    // these points: base of the wrist, base of the pinky, and base of the index finger. 
+    // We will then calculate the normal vector (perpendicular vector) to this triangle, 
+    // which represents the palm direction. Afterward, we can calculate the angle between 
+    // this normal vector and the gravity vector to determine the orientation of the palm.
+
+
+    // Vector from the base of the wrist to the base of the pinky
+    const vectorWristToPinky = directionVector(prediction.landmarks[0], prediction.landmarks[17]);
+
+    // Vector from the base of the wrist to the base of the index finger
+    const vectorWristToIndex = directionVector(prediction.landmarks[0], prediction.landmarks[5]);
+
+    // Calculate the vector perpendicular to the palm using cross product
+    const palmNormalVector = crossProduct(vectorWristToPinky, vectorWristToIndex);
+
+    // Calculate the angle between the palm-normal vector and the gravity vector
+    const palmAngleToGravity = calculateAngleVectors(palmNormalVector, gravityVector);
+    angles.push(palmAngleToGravity);
+
+
+    // // Add angles between each finger's joints to feature vector
+    // selectedAngles.forEach(angleSet => {
+    //   const angle = calculateAngle(
+    //     prediction.landmarks[angleSet[0]],
+    //     prediction.landmarks[angleSet[1]],
+    //     prediction.landmarks[angleSet[2]]
+    //   );
+    //   featureVector.push(angle);
+    // });
 
 
   // Function to calculate the direction vector from one point to another
@@ -215,6 +255,16 @@ function calculateDistance(pointA, pointB) {
   const zDiff = pointA[2] - pointB[2];
   return Math.sqrt(xDiff * xDiff + yDiff * yDiff + zDiff * zDiff);
 }
+
+
+function crossProduct(vectorA, vectorB) {
+  return [
+    vectorA[1] * vectorB[2] - vectorA[2] * vectorB[1],
+    vectorA[2] * vectorB[0] - vectorA[0] * vectorB[2],
+    vectorA[0] * vectorB[1] - vectorA[1] * vectorB[0]
+  ];
+}
+
 
 function calculateAngle(pointA, pointB, pointC) {
   const vectorAB = [pointB[0] - pointA[0], pointB[1] - pointA[1], pointB[2] - pointA[2]];
