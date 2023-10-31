@@ -87,6 +87,56 @@ function sendKeypoints(predictions){
 
 
 
+// function sendKeypoints(predictions) {
+//   if (predictions.length > 0) {
+//     let prediction = predictions[0];
+//     let referencePoint = prediction.annotations.palmBase[0];
+//     let featureVector = [];
+
+//     // Add relative positions to feature vector
+//     prediction.landmarks.forEach(keypoint => {
+//       featureVector.push(keypoint[0] - referencePoint[0]);
+//       featureVector.push(keypoint[1] - referencePoint[1]);
+//       featureVector.push(keypoint[2] - referencePoint[2]);
+//     });
+
+//     // Define selected pairs of landmarks for distance calculation
+//     const selectedPairs = [
+//       // PalmBase to fingertips
+//       [0, 4], [0, 8], [0, 12], [0, 16], [0, 20],
+//       // Between fingertips
+//       [4, 8], [8, 12], [12, 16], [16, 20],
+//       // Between each finger's joints
+//       [1, 2], [2, 3], [3, 4], [5, 6], [6, 7], [7, 8],
+//       [9, 10], [10, 11], [11, 12], [13, 14], [14, 15], [15, 16],
+//       [17, 18], [18, 19], [19, 20],
+//       // Between bases of adjacent fingers
+//       [1, 5], [5, 9], [9, 13], [13, 17],
+//       // Diagonal distances across the palm
+//       [0, 8], [0, 12], [0, 16], [5, 17], [1, 13],
+//       // Thumb to other fingertips
+//       [4, 8], [4, 12], [4, 16], [4, 20],
+//       // Wrist to fingertips
+//       [0, 4], [0, 8], [0, 12], [0, 16], [0, 20],
+//       // Add more pairs as needed...
+//     ];
+
+//     // Add selected inter-landmark distances to feature vector
+//     selectedPairs.forEach(pair => {
+//       const distance = calculateDistance(prediction.landmarks[pair[0]], prediction.landmarks[pair[1]]);
+//       featureVector.push(distance);
+//     });
+
+//     // Normalize the feature vector
+//     featureVector = normalizeVector(featureVector);
+
+//     // Send the feature vector using OSC
+//     sendOsc('/handpose', featureVector);
+//   }
+// }
+
+
+
 function sendKeypoints(predictions) {
   if (predictions.length > 0) {
     let prediction = predictions[0];
@@ -100,22 +150,24 @@ function sendKeypoints(predictions) {
       featureVector.push(keypoint[2] - referencePoint[2]);
     });
 
+
     // Define selected pairs of landmarks for distance calculation
     const selectedPairs = [
       // PalmBase to fingertips
       [0, 4], [0, 8], [0, 12], [0, 16], [0, 20],
+
       // Between fingertips
       [4, 8], [8, 12], [12, 16], [16, 20],
-      // Between each finger's joints
-      [1, 2], [2, 3], [3, 4], [5, 6], [6, 7], [7, 8],
-      [9, 10], [10, 11], [11, 12], [13, 14], [14, 15], [15, 16],
-      [17, 18], [18, 19], [19, 20],
+
       // Between bases of adjacent fingers
       [1, 5], [5, 9], [9, 13], [13, 17],
+
       // Diagonal distances across the palm
       [0, 8], [0, 12], [0, 16], [5, 17], [1, 13],
+
       // Thumb to other fingertips
       [4, 8], [4, 12], [4, 16], [4, 20],
+
       // Wrist to fingertips
       [0, 4], [0, 8], [0, 12], [0, 16], [0, 20],
       // Add more pairs as needed...
@@ -127,6 +179,34 @@ function sendKeypoints(predictions) {
       featureVector.push(distance);
     });
 
+    // Define angles between each finger's joints
+    const selectedAngles = [
+      // Thumb joints angles
+      [0, 1, 2], [1, 2, 3], [2, 3, 4],
+
+      // Index finger joints angles
+      [0, 5, 6], [5, 6, 7], [6, 7, 8],
+
+      // Middle finger joints angles
+      [0, 9, 10], [9, 10, 11], [10, 11, 12],
+
+      // Ring finger joints angles
+      [0, 13, 14], [13, 14, 15], [14, 15, 16],
+
+      // Pinky finger joints angles
+      [0, 17, 18], [17, 18, 19], [18, 19, 20],
+    ];
+
+    // Add angles between each finger's joints to feature vector
+    selectedAngles.forEach(angleSet => {
+      const angle = calculateAngle(
+        prediction.landmarks[angleSet[0]],
+        prediction.landmarks[angleSet[1]],
+        prediction.landmarks[angleSet[2]]
+      );
+      featureVector.push(angle);
+    });
+
     // Normalize the feature vector
     featureVector = normalizeVector(featureVector);
 
@@ -136,12 +216,23 @@ function sendKeypoints(predictions) {
 }
 
 function calculateDistance(pointA, pointB) {
-  return Math.sqrt(
-    Math.pow(pointA[0] - pointB[0], 2) +
-    Math.pow(pointA[1] - pointB[1], 2) +
-    Math.pow(pointA[2] - pointB[2], 2)
-  );
+  const xDiff = pointA[0] - pointB[0];
+  const yDiff = pointA[1] - pointB[1];
+  const zDiff = pointA[2] - pointB[2];
+  return Math.sqrt(xDiff * xDiff + yDiff * yDiff + zDiff * zDiff);
 }
+
+function calculateAngle(pointA, pointB, pointC) {
+  const vectorAB = [pointB[0] - pointA[0], pointB[1] - pointA[1], pointB[2] - pointA[2]];
+  const vectorBC = [pointC[0] - pointB[0], pointC[1] - pointB[1], pointC[2] - pointB[2]];
+  
+  const dotProduct = vectorAB[0] * vectorBC[0] + vectorAB[1] * vectorBC[1] + vectorAB[2] * vectorBC[2];
+  const magnitudeAB = Math.sqrt(vectorAB[0] * vectorAB[0] + vectorAB[1] * vectorAB[1] + vectorAB[2] * vectorAB[2]);
+  const magnitudeBC = Math.sqrt(vectorBC[0] * vectorBC[0] + vectorBC[1] * vectorBC[1] + vectorBC[2] * vectorBC[2]);
+
+  return Math.acos(dotProduct / (magnitudeAB * magnitudeBC)) * (180 / Math.PI); // Angle in degrees
+}
+
 
 function normalizeVector(vector) {
   const max = Math.max(...vector);
@@ -167,38 +258,6 @@ function drawKeypoints() {
     ellipse(keypoint[0], keypoint[1], 10, 10);
   }
 }
-
-// function sendKeypoints(predictions) {
-//   const prediction = predictions[0];
-
-//   // Helper function to calculate the approximate distance between two points
-//   const approxDistance = (point1, point2) => {
-//     const dx = point1[0] - point2[0];
-//     const dy = point1[1] - point2[1];
-//     const dz = point1[2] - point2[2];
-//     return Math.abs(dx) + Math.abs(dy) + Math.abs(dz); // Manhattan distance approximation
-//   };
-
-//   let flatData = [];
-
-//   // Distances from PalmBase to each fingertip (simplified to just thumb and pinky)
-//   const palmBase = prediction.annotations.palmBase[0];
-//   const thumbTip = prediction.annotations.thumb.at(-1);
-//   const pinkyTip = prediction.annotations.pinky.at(-1);
-//   flatData.push(approxDistance(palmBase, thumbTip));
-//   flatData.push(approxDistance(palmBase, pinkyTip));
-
-//   // Distance between thumb and pinky tips (simplified to just these two)
-//   flatData.push(approxDistance(thumbTip, pinkyTip));
-
-//   // Send the flatData as OSC message
-//   sendOsc('/handpose', flatData);
-// }
-
-// function sendOsc(address, value) {
-//   socket.emit('message', [address].concat(value));
-// }
-
 
 
 
