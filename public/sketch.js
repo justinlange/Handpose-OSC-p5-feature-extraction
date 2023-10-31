@@ -59,95 +59,19 @@ function sendKeypoints(predictions){
 }
 
 
-// function sendKeypoints(predictions) {
-//   let prediction = predictions[0];
-
-//   // Assuming 'palmBase' is the bottom of the hand
-//   // and it's the first element in the palmBase array
-//   let referencePoint = prediction.annotations.palmBase[0];
-
-//   let flatData = [];
-  
-//   // Loop through each keypoint
-//   prediction.landmarks.forEach(keypoint => {
-//     // Calculate the relative position with respect to the reference point
-//     let relativeX = keypoint[0] - referencePoint[0];
-//     let relativeY = keypoint[1] - referencePoint[1];
-//     let relativeZ = keypoint[2] - referencePoint[2];
-
-//     // Add the relative positions to the flatData array
-//     flatData.push(relativeX, relativeY, relativeZ);
-//   });
-
-//   // Send the flattened and relative data to OSC
-//   sendOsc('/handpose', flatData);
-// }
-
-
-
-
-
-// function sendKeypoints(predictions) {
-//   if (predictions.length > 0) {
-//     let prediction = predictions[0];
-//     let referencePoint = prediction.annotations.palmBase[0];
-//     let featureVector = [];
-
-//     // Add relative positions to feature vector
-//     prediction.landmarks.forEach(keypoint => {
-//       featureVector.push(keypoint[0] - referencePoint[0]);
-//       featureVector.push(keypoint[1] - referencePoint[1]);
-//       featureVector.push(keypoint[2] - referencePoint[2]);
-//     });
-
-//     // Define selected pairs of landmarks for distance calculation
-//     const selectedPairs = [
-//       // PalmBase to fingertips
-//       [0, 4], [0, 8], [0, 12], [0, 16], [0, 20],
-//       // Between fingertips
-//       [4, 8], [8, 12], [12, 16], [16, 20],
-//       // Between each finger's joints
-//       [1, 2], [2, 3], [3, 4], [5, 6], [6, 7], [7, 8],
-//       [9, 10], [10, 11], [11, 12], [13, 14], [14, 15], [15, 16],
-//       [17, 18], [18, 19], [19, 20],
-//       // Between bases of adjacent fingers
-//       [1, 5], [5, 9], [9, 13], [13, 17],
-//       // Diagonal distances across the palm
-//       [0, 8], [0, 12], [0, 16], [5, 17], [1, 13],
-//       // Thumb to other fingertips
-//       [4, 8], [4, 12], [4, 16], [4, 20],
-//       // Wrist to fingertips
-//       [0, 4], [0, 8], [0, 12], [0, 16], [0, 20],
-//       // Add more pairs as needed...
-//     ];
-
-//     // Add selected inter-landmark distances to feature vector
-//     selectedPairs.forEach(pair => {
-//       const distance = calculateDistance(prediction.landmarks[pair[0]], prediction.landmarks[pair[1]]);
-//       featureVector.push(distance);
-//     });
-
-//     // Normalize the feature vector
-//     featureVector = normalizeVector(featureVector);
-
-//     // Send the feature vector using OSC
-//     sendOsc('/handpose', featureVector);
-//   }
-// }
-
-
 
 function sendKeypoints(predictions) {
   if (predictions.length > 0) {
     let prediction = predictions[0];
     let referencePoint = prediction.annotations.palmBase[0];
-    let featureVector = [];
+    let distances = [];
+    let angles = [];
 
     // Add relative positions to feature vector
     prediction.landmarks.forEach(keypoint => {
-      featureVector.push(keypoint[0] - referencePoint[0]);
-      featureVector.push(keypoint[1] - referencePoint[1]);
-      featureVector.push(keypoint[2] - referencePoint[2]);
+      distances.push(keypoint[0] - referencePoint[0]);
+      distances.push(keypoint[1] - referencePoint[1]);
+      distances.push(keypoint[2] - referencePoint[2]);
     });
 
 
@@ -159,25 +83,31 @@ function sendKeypoints(predictions) {
       // Between fingertips
       [4, 8], [8, 12], [12, 16], [16, 20],
 
-      // Between bases of adjacent fingers
-      [1, 5], [5, 9], [9, 13], [13, 17],
+      // Between the joints that are one joint farther out than the base of the fingers (i.e the proximal interphalangeal joint)
+      [2, 6], [6, 10], [10, 14], [14, 18],
 
-      // Diagonal distances across the palm
-      [0, 8], [0, 12], [0, 16], [5, 17], [1, 13],
+      // // Diagonal distances across the palm
+      // [0, 8], [0, 12], [0, 16], [5, 17], [1, 13],
 
       // Thumb to other fingertips
       [4, 8], [4, 12], [4, 16], [4, 20],
+
+      // Thumb to the base of each finger
+      [4, 5], [4, 9], [4, 13], [4, 17],
 
       // Wrist to fingertips
       [0, 4], [0, 8], [0, 12], [0, 16], [0, 20],
       // Add more pairs as needed...
     ];
 
-    // Add selected inter-landmark distances to feature vector
+
+    // Add selected inter-landmark distances to distances array
     selectedPairs.forEach(pair => {
       const distance = calculateDistance(prediction.landmarks[pair[0]], prediction.landmarks[pair[1]]);
-      featureVector.push(distance);
+      distances.push(distance);
     });
+
+
 
     // Define angles between each finger's joints
     const selectedAngles = [
@@ -197,6 +127,48 @@ function sendKeypoints(predictions) {
       [0, 17, 18], [17, 18, 19], [18, 19, 20],
     ];
 
+
+    // Define the wrist and fingertip points for direction calculation
+    const wristToFingertips = [
+      [0, 4], [0, 8], [0, 12], [0, 16], [0, 20]
+    ];
+
+     // Add direction angles relative to the wrist direction to feature vector
+    wristToFingertips.forEach(pair => {
+      const wristDirection = directionVector(prediction.landmarks[pair[0]], prediction.landmarks[0]);
+      const fingerDirection = directionVector(prediction.landmarks[pair[0]], prediction.landmarks[pair[1]]);
+      const angle = calculateAngleVectors(wristDirection, fingerDirection);
+      featureVector.push(angle);
+    });
+
+
+      // Add angles between each finger's joints to angles array
+    selectedAngles.forEach(angleSet => {
+      const angle = calculateAngle(
+        prediction.landmarks[angleSet[0]],
+        prediction.landmarks[angleSet[1]],
+        prediction.landmarks[angleSet[2]]
+      );
+      angles.push(angle);
+    });
+
+
+     // Define the gravity vector (pointing downwards)
+    const gravityVector = [0, -1, 0];
+
+    // Define fingertip points for direction calculation relative to gravity
+    const fingertips = [4, 8, 12, 16, 20];
+
+
+
+    // Add direction angles relative to the gravity vector to angles array
+    fingertips.forEach(tip => {
+      const fingerDirection = directionVector(prediction.landmarks[tip - 1], prediction.landmarks[tip]);
+      const angle = calculateAngleVectors(fingerDirection, gravityVector);
+      angles.push(angle);
+    });
+
+
     // Add angles between each finger's joints to feature vector
     selectedAngles.forEach(angleSet => {
       const angle = calculateAngle(
@@ -207,8 +179,30 @@ function sendKeypoints(predictions) {
       featureVector.push(angle);
     });
 
-    // Normalize the feature vector
-    featureVector = normalizeVector(featureVector);
+
+  // Function to calculate the direction vector from one point to another
+  function directionVector(fromPoint, toPoint) {
+    return [
+      toPoint[0] - fromPoint[0],
+      toPoint[1] - fromPoint[1],
+      toPoint[2] - fromPoint[2]
+    ];
+  }
+
+  // Function to calculate angle between two vectors in degrees
+function calculateAngleVectors(vectorA, vectorB) {
+  const dotProduct = vectorA[0] * vectorB[0] + vectorA[1] * vectorB[1] + vectorA[2] * vectorB[2];
+  const magnitudeA = Math.sqrt(vectorA[0] * vectorA[0] + vectorA[1] * vectorA[1] + vectorA[2] * vectorA[2]);
+  const magnitudeB = Math.sqrt(vectorB[0] * vectorB[0] + vectorB[1] * vectorB[1] + vectorB[2] * vectorB[2]);
+  return Math.acos(dotProduct / (magnitudeA * magnitudeB)) * (180 / Math.PI); // Angle in degrees
+}
+
+
+ // Normalize distances and angles separately, then combine them
+    distances = normalizeVector(distances);
+    angles = normalizeVector(angles);
+    let featureVector = distances.concat(angles);
+
 
     // Send the feature vector using OSC
     sendOsc('/handpose', featureVector);
